@@ -1,0 +1,42 @@
+#!/bin/bash
+
+FILE="1.log"
+DICT="common_passwords.txt"
+
+[[ -e $FILE ]] || { echo "Файл не знайдено: $FILE" >&2; exit 1; }
+[[ -f $DICT ]] || { echo "Файл словника не знайдено: $DICT" >&2; exit 1; }
+
+started=$(grep -c "Finished Software installer" "$FILE")
+removed=$(grep -c "Finished Remove" "$FILE")
+
+echo "Started_services: $started"
+echo "Removed_services: $removed"
+echo
+
+passwords=$(grep -E "admin_pass|softdbpass" "$FILE" |
+    sed '/<input type="text" /s/^.*value="\(.*\)">'"'"',$/\1/' |
+    cut -d"'" -f4 |
+    sort -u)
+
+echo "$passwords" | while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  if [[ "$line" =~ value=\"([^\"]+)\" ]]; then
+    pw="${BASH_REMATCH[1]}"
+  else
+    pw="$line"
+  fi
+  pw="${pw//&amp;/&}"
+
+  echo -n " › $pw: "
+  [ "${#pw}" -lt 12 ]   && { echo "FAIL (length < 12)"; continue; }
+  [[ "$pw" =~ [A-Z] ]]  || { echo "FAIL (no uppercase)"; continue; }
+  [[ "$pw" =~ [a-z] ]]  || { echo "FAIL (no lowercase)"; continue; }
+  [[ "$pw" =~ [0-9] ]]  || { echo "FAIL (no digit)"; continue; }
+  [[ "$pw" =~ [^a-zA-Z0-9] ]] || { echo "FAIL (no special char)"; continue; }
+  if ! grep -Fq "$pw" "$DICT"; then
+    echo "FAIL (common password)"
+    continue
+  fi
+  echo "OK"
+done
+
