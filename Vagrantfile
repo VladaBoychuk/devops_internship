@@ -35,7 +35,7 @@ Vagrant.configure('2') do |config|
   # Mount host keys read-only
   config.vm.synced_folder KEYS_DIR, '/vagrant/keys', owner: 'root', group: 'root', mount_options: ['ro', 'dmode=700', 'fmode=600']
 
-  # Global SSH hardening (safe and idempotent)
+  # Global SSH hardening
   config.vm.provision 'shell', inline: <<-SHELL
     set -eux
     grep -qxF 'PasswordAuthentication no' /etc/ssh/sshd_config || sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -44,10 +44,13 @@ Vagrant.configure('2') do |config|
     systemctl restart ssh
   SHELL
 
+  # Define three SFTP nodes
   (1..3).each do |i|
     config.vm.define "sftp#{i}" do |vm|
       vm.vm.provider 'virtualbox' do |vb|
         vb.gui = true
+        vb.memory = 5120
+        vb.cpus   = 4
         vb.customize ['modifyvm', :id, '--uartmode1', 'disconnected']
         vb.customize ['modifyvm', :id, '--uartmode2', 'disconnected']
       end
@@ -56,6 +59,7 @@ Vagrant.configure('2') do |config|
       vm.vm.network  'private_network', ip: "192.168.56.10#{i}"
       vm.vm.network  'forwarded_port', guest: 22, host: 2200 + i
 
+      # Base provisioning
       vm.vm.provision 'shell', inline: <<-SHELL
         set -eux
         export DEBIAN_FRONTEND=noninteractive
@@ -88,15 +92,22 @@ EOF
         fi
         chown m2m:m2m /home/m2m/.ssh/id_ed25519 && chmod 600 /home/m2m/.ssh/id_ed25519
 
-        # Build authorized_keys from static pub files
+        # Build authorized_keys
         > /home/m2m/.ssh/authorized_keys
         for keyfile in /vagrant/keys/sftp1.pub /vagrant/keys/sftp2.pub /vagrant/keys/sftp3.pub; do
           [ -f "$keyfile" ] && cat "$keyfile" >> /home/m2m/.ssh/authorized_keys
         done
         chown m2m:m2m /home/m2m/.ssh/authorized_keys && chmod 600 /home/m2m/.ssh/authorized_keys
+      SHELL
 
-        # Remove host-side private copy
-        rm -f /vagrant/keys/sftp#{i}
+      # Copy external generate script to temporary location
+      vm.vm.provision 'file', source: 'scripts/generate.sh', destination: '/tmp/generate.sh'
+      # Move script into place and configure cron
+      vm.vm.provision 'shell', inline: <<-SHELL
+        mv /tmp/generate.sh /home/m2m/generate.sh
+        chmod 750 /home/m2m/generate.sh
+        chown m2m:m2m /home/m2m/generate.sh
+        (crontab -u m2m -l 2>/dev/null; echo "*/5 * * * * /home/m2m/generate.sh") | crontab -u m2m -
       SHELL
     end
   end
