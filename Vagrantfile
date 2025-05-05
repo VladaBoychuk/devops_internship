@@ -17,7 +17,7 @@ if ssh_keygen_available?
     priv = File.join(KEYS_DIR, name)
     pub  = "#{priv}.pub"
     unless File.exist?(priv) && File.exist?(pub)
-      if system('ssh-keygen', '-t', 'ed25519', '-f', priv, '-N', '', '-C', "#{name}@vagrant")
+      if system('ssh-keygen', '-t', 'ed25519', '-f', priv, '-N ''', '-C', "#{name}@vagrant")
         FileUtils.chmod 0o600, priv, pub
       else
         warn "[vagrant] Warning: ssh-keygen failed for #{name}; you may need to generate keys manually."
@@ -66,7 +66,7 @@ Vagrant.configure('2') do |config|
         apt-get update -y
         apt-get install -y --no-install-recommends openssh-server rkhunter net-tools
 
-        # SFTP user (chroot-only)
+        # SFTP chroot user
         id -u sftpuser >/dev/null 2>&1 || useradd -m -s /usr/sbin/nologin sftpuser
         mkdir -p /home/sftpuser/upload
         chown root:root /home/sftpuser && chmod 755 /home/sftpuser
@@ -80,34 +80,40 @@ Match User sftpuser
 EOF
         systemctl restart ssh
 
-        # M2M user setup
-        id -u m2m >/dev/null 2>&1 || useradd -m -s /bin/bash m2m
-        mkdir -p /home/m2m/.ssh && chown m2m:m2m /home/m2m/.ssh && chmod 700 /home/m2m/.ssh
+        # SSH key setup for sftpuser
+        SSH_DIR="/home/sftpuser/.ssh"
+        mkdir -p "$SSH_DIR"
+        chown sftpuser:sftpuser "$SSH_DIR"
+        chmod 700 "$SSH_DIR"
 
-        # SSH key management
-        if [ -r /vagrant/keys/sftp#{i} ]; then
-          cp /vagrant/keys/sftp#{i} /home/m2m/.ssh/id_ed25519
+        # Copy or generate host keypair for ring transfer
+        KEY_PRIV="/vagrant/keys/sftp#{i}"
+        KEY_PUB="/vagrant/keys/sftp#{i}.pub"
+        if [ -r "$KEY_PRIV" ] && [ -r "$KEY_PUB" ]; then
+          cp "$KEY_PRIV" "$SSH_DIR/id_ed25519"
+          cp "$KEY_PUB" "$SSH_DIR/id_ed25519.pub"
         else
-          sudo -u m2m ssh-keygen -t ed25519 -f /home/m2m/.ssh/id_ed25519 -N '' -C "sftp#{i}@vagrant"
+          sudo -u sftpuser ssh-keygen -t ed25519 -f "$SSH_DIR/id_ed25519" -N '' -C "sftp#{i}@vagrant"
         fi
-        chown m2m:m2m /home/m2m/.ssh/id_ed25519 && chmod 600 /home/m2m/.ssh/id_ed25519
+        chown sftpuser:sftpuser "$SSH_DIR/id_ed25519" "$SSH_DIR/id_ed25519.pub"
+        chmod 600        "$SSH_DIR/id_ed25519"
 
-        # Build authorized_keys
-        > /home/m2m/.ssh/authorized_keys
-        for keyfile in /vagrant/keys/sftp1.pub /vagrant/keys/sftp2.pub /vagrant/keys/sftp3.pub; do
-          [ -f "$keyfile" ] && cat "$keyfile" >> /home/m2m/.ssh/authorized_keys
+        # Build authorized_keys for ring of SFTP nodes
+        :> "$SSH_DIR/authorized_keys"
+        for pub in /vagrant/keys/sftp1.pub /vagrant/keys/sftp2.pub /vagrant/keys/sftp3.pub; do
+          [ -f "$pub" ] && cat "$pub" >> "$SSH_DIR/authorized_keys"
         done
-        chown m2m:m2m /home/m2m/.ssh/authorized_keys && chmod 600 /home/m2m/.ssh/authorized_keys
+        chown sftpuser:sftpuser "$SSH_DIR/authorized_keys"
+        chmod 600            "$SSH_DIR/authorized_keys"
       SHELL
 
-      # Copy external generate script to temporary location
+      # Copy and schedule generate.sh under sftpuser
       vm.vm.provision 'file', source: 'scripts/generate.sh', destination: '/tmp/generate.sh'
-      # Move script into place and configure cron
       vm.vm.provision 'shell', inline: <<-SHELL
-        mv /tmp/generate.sh /home/m2m/generate.sh
-        chmod 750 /home/m2m/generate.sh
-        chown m2m:m2m /home/m2m/generate.sh
-        (crontab -u m2m -l 2>/dev/null; echo "*/5 * * * * /home/m2m/generate.sh") | crontab -u m2m -
+        mv /tmp/generate.sh /home/sftpuser/generate.sh
+        chmod 750 /home/sftpuser/generate.sh
+        chown sftpuser:sftpuser /home/sftpuser/generate.sh
+        (crontab -u sftpuser -l 2>/dev/null; echo "*/5 * * * * /home/sftpuser/generate.sh") | crontab -u sftpuser -
       SHELL
     end
   end
