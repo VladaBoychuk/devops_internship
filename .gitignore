@@ -1,0 +1,6 @@
+.vagrant/*
+.vagrant
+keys/*
+keys
+*.log
+*.pub
