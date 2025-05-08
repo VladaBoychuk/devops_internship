@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFTP Activity Report</title>
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #1e3a8a;
+            --secondary-color: #f97316;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-color: #374151;
+            --border-radius: 12px;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        header {
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            color: #fff;
+            padding: 1rem 2rem;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+        header h1 {
+            margin: 0;
+            font-weight: 500;
+            font-size: 2rem;
+        }
+        main {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+        }
+        thead {
+            background-color: var(--primary-color);
+            color: #fff;
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+        }
+        tbody tr {
+            border-bottom: 1px solid #e5e7eb;
+            transition: background 0.2s;
+        }
+        tbody tr:hover {
+            background-color: #e0f2fe;
+        }
+        @media (max-width: 768px) {
+            thead {
+                display: none;
+            }
+            tbody tr {
+                display: block;
+                margin-bottom: 1rem;
+            }
+            tbody td {
+                display: flex;
+                justify-content: space-between;
+                padding: 0.5rem;
+            }
+            tbody td::before {
+                content: attr(data-label);
+                font-weight: 500;
+            }
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+        }
+        .chart-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+        }
+        footer {
+            text-align: center;
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>SFTP Server Activity Report</h1>
+    </header>
+    <main>
+        <section class="card">
+            <h2>Transferred Files Statistics</h2>
+            {% if stats %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Source Host</th>
+                        <th>Source IP Address</th>
+                        <th>Transferred Files</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in stats %}
+                    <tr>
+                        <td data-label="Host">{{ row.source_host }}</td>
+                        <td data-label="IP">{{ row.source_ip }}</td>
+                        <td data-label="Files">{{ row.files_sent_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No data to display.</p>
+            {% endif %}
+        </section>
+
+        <section class="card">
+            <h2>Activity Chart</h2>
+            <div class="chart-container">
+                <canvas id="sftpActivityChart"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <small>Data on this page is automatically updated from the database.</small>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const labels = {{ chart_labels | tojson | safe }};
+            const data = {{ chart_data | tojson | safe }};
+            if (labels.length && data.length) {
+                const ctx = document.getElementById('sftpActivityChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Files Sent',
+                            data,
+                            backgroundColor: 'rgba(30, 58, 138, 0.5)',
+                            borderColor: 'rgba(30, 58, 138, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false },
+                            title: { display: true, text: 'Number of Files Sent per Host' }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                        }
+                    }
+                });
+            } else {
+                const canvas = document.getElementById('sftpActivityChart');
+                canvas.parentNode.innerHTML = '<p>Not enough data to build the chart.</p>';
+            }
+        });
+    </script>
+</body>
+</html>
