@@ -4,3 +4,9 @@ keys/*
 keys
 *.log
 *.pub
+collected_sftp_files/*
+collected_sftp_files
+instance
+instance/*
+__pycache__/*
+__pycache__
