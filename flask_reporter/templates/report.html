@@ -9,39 +9,110 @@
         :root {
             --primary-color: #1e3a8a;
             --secondary-color: #f97316;
+            --accent-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --neutral-color: #6b7280;
             --bg-color: #f3f4f6;
             --card-bg: #ffffff;
             --text-color: #374151;
-            --border-radius: 12px;
-            --shadow: 0 4px 12px rgba(0,0,0,0.05);
+            --border-radius: 8px;
+            --shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
         * { box-sizing: border-box; }
-        body { margin:0; font-family:'Roboto',sans-serif; background:var(--bg-color); color:var(--text-color); }
-        header { background:linear-gradient(90deg,var(--primary-color),var(--secondary-color)); color:#fff; text-align:center; padding:1rem; box-shadow:var(--shadow); }
-        main { max-width:1200px; margin:2rem auto; padding:0 1rem; }
+        body { margin:0; font-family:'Roboto',sans-serif; background:var(--bg-color); color:var(--text-color); line-height: 1.6; }
+        header { background:linear-gradient(90deg,var(--primary-color),var(--secondary-color)); color:#fff; text-align:center; padding:1.5rem; box-shadow:var(--shadow); margin-bottom: 2rem;}
+        header h1 { margin: 0; font-weight: 700; font-size: 1.8rem; letter-spacing: 0.5px;}
+        main { max-width:1200px; margin:0 auto; padding:0 1rem; }
         .card { background:var(--card-bg); border-radius:var(--border-radius); box-shadow:var(--shadow); padding:1.5rem; margin-bottom:2rem; }
+        .card h2 { margin-top:0; color: var(--primary-color); font-size: 1.4rem; border-bottom: 2px solid var(--bg-color); padding-bottom: 0.5rem; margin-bottom: 1rem;}
         table { width:100%; border-collapse:collapse; margin-top:1rem; }
-        th, td { padding:0.75rem 1rem; text-align:left; }
+        th, td { padding:0.8rem 1rem; text-align:left; border-bottom: 1px solid #e5e7eb; }
         thead { background:var(--primary-color); color:#fff; }
-        tbody tr { border-bottom:1px solid #e5e7eb; transition:background .2s; }
-        tbody tr:hover { background:#e0f2fe; }
-        @media (max-width:768px) {
-            thead { display:none; }
-            tbody tr { display:block; margin-bottom:1rem; }
-            tbody td { display:flex; justify-content:space-between; padding:0.5rem; }
-            tbody td::before { content:attr(data-label); font-weight:500; }
+        th { font-weight: 500; }
+        tbody tr:hover { background:#f0f9ff; }
+        
+        .info-box {
+            background-color: #e0f2fe;
+            border-left: 4px solid var(--primary-color);
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: var(--border-radius);
+            font-size: 0.9rem;
         }
-        .chart-container { position:relative; width:100%; padding-top:56.25%; }
-        .chart-container canvas { position:absolute; top:0; left:0; width:100%!important; height:100%!important; border-radius:var(--border-radius); box-shadow:var(--shadow);}
-        footer { text-align:center; font-size:.875rem; color:#6b7280; margin:2rem 0; }
+        .info-box p { margin: 0.3rem 0; }
+
+        @media (max-width:768px) {
+            table thead { display:none; }
+            table tbody, table tr, table td { display:block; width:100%; }
+            table tr { margin-bottom:1rem; border:1px solid #ddd; border-radius:var(--border-radius); }
+            table td { text-align:right; padding-left:50%; position:relative; border-bottom:0; }
+            table td:last-child { border-bottom: 0; }
+            table td::before { 
+                content:attr(data-label); 
+                position:absolute; 
+                left:1rem; 
+                width:calc(50% - 2rem); 
+                padding-right:10px; 
+                white-space:nowrap; 
+                font-weight:500; 
+                text-align:left;
+                color: var(--primary-color);
+            }
+        }
+        .chart-container { position:relative; width:100%; min-height: 350px; padding-top:0; }
+        .chart-container canvas { position:absolute; top:0; left:0; width:100%!important; height:100%!important; border-radius:var(--border-radius); }
+        footer { text-align:center; font-size:.875rem; color:var(--neutral-color); margin:2rem 0; padding-top: 1rem; border-top: 1px solid #e5e7eb;}
+
+        .status-active { color: var(--accent-color); font-weight: bold; }
+        .status-stale { color: var(--warning-color); font-weight: bold; }
+        .status-no-activity, .status-unknown { color: var(--neutral-color); }
+        .status-error { color: var(--danger-color); font-weight: bold; }
     </style>
 </head>
 <body>
     <header><h1>SFTP Server Activity Report</h1></header>
     <main>
+        <section class="card info-box">
+             <p>Page generated at: <strong>{{ page_load_time }}</strong></p>
+             <p>Database last updated by scheduler: <strong>{{ last_db_update if last_db_update != "N/A" else "Scheduler not run yet or first update pending" }}</strong></p>
+        </section>
+
         <section class="card">
-            <h2>Transferred Files Statistics</h2>
-            {% if stats %}
+            <h2>SFTP Host Sending Activity & Status</h2>
+            {% if host_sending_activity %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Source Host</th>
+                        <th>IP Address</th>
+                        <th>Total Files Sent</th>
+                        <th>First File Sent</th>
+                        <th>Last File Sent</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in host_sending_activity %}
+                    <tr>
+                        <td data-label="Host">{{ row.source_host }}</td>
+                        <td data-label="IP">{{ row.ip_address }}</td>
+                        <td data-label="Total Sent">{{ row.total_files_sent }}</td>
+                        <td data-label="First Sent">{{ row.first_file_sent }}</td>
+                        <td data-label="Last Sent">{{ row.last_file_sent }}</td>
+                        <td data-label="Status" class="{{ row.status_class }}">{{ row.status }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No host sending activity data to display.</p>
+            {% endif %}
+        </section>
+
+        <section class="card">
+            <h2>Transfers Between Hosts (Receiver &lt;- Source)</h2>
+            {% if stats_detailed_table %}
             <table>
                 <thead>
                     <tr>
@@ -51,7 +122,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for row in stats %}
+                    {% for row in stats_detailed_table %}
                     <tr>
                         <td data-label="To">{{ row.receiving_host }}</td>
                         <td data-label="From">{{ row.source_host }}</td>
@@ -61,40 +132,50 @@
                 </tbody>
             </table>
             {% else %}
-            <p>No data to display.</p>
+            <p>No detailed transfer data to display.</p>
             {% endif %}
         </section>
+        
         <section class="card">
-            <h2>Activity Chart (stacked)</h2>
+            <h2>Activity Chart (Files Received by Host, Stacked by Source)</h2>
             <div class="chart-container">
                 <canvas id="sftpActivityChart"></canvas>
             </div>
         </section>
     </main>
-    <footer><small>Data on this page is automatically updated.</small></footer>
+    <footer><small>Data on this page is automatically updated. Staleness threshold: {{ staleness_threshold_minutes }} minutes.</small></footer>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const labels    = {{ chart_labels   | tojson | safe }};
-        const datasets  = {{ chart_datasets | tojson | safe }};
-        const ctx = document.getElementById('sftpActivityChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'bar',
-            data: { labels, datasets },
-            options: {
-                responsive: true,
-                plugins: {
-                    title:  { display: true, text: 'Files Received per Host by Source' },
-                    legend: { position: 'top' },
-                    tooltip:{ mode: 'index', intersect: false }
-                },
-                scales: {
-                    x: { stacked: true },
-                    y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+        const labels   = {{ chart_labels   | tojson | safe }};
+        const datasets = {{ chart_datasets | tojson | safe }};
+        
+        if (labels && labels.length && datasets && datasets.length) {
+            const ctx = document.getElementById('sftpActivityChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title:  { display: true, text: 'Files Received per Host (Stacked by Source)' },
+                        legend: { position: 'top' },
+                        tooltip:{ mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        x: { stacked: true, title: { display: true, text: 'Receiving Host'} },
+                        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1, callback: function(value) {if (Number.isInteger(value)) {return value;}}} , title: {display: true, text: 'Number of Files Received'}}
+                    }
                 }
+            });
+        } else {
+            const chartDiv = document.getElementById('sftpActivityChart').parentNode;
+            if (chartDiv) {
+                chartDiv.innerHTML = '<p style="text-align:center; padding: 20px;">Not enough data for activity chart.</p>';
             }
-        });
+        }
     });
     </script>
 </body>
