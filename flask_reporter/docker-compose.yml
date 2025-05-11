@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:15-alpine 
+    container_name: sftp_reporter_pg_db 
+    environment:
+      POSTGRES_USER: sftp_reporter_user     
+      POSTGRES_PASSWORD: Password_123 
+      POSTGRES_DB: sftp_activity_db       
+    volumes:
+      - postgres_db_data:/var/lib/postgresql/data # Preserves database data between restarts
+    ports:
+      - "5433:5432" 
+    restart: unless-stopped
+    healthcheck: 
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost"]
+      interval: 5s    
+      timeout: 5s     
+      retries: 5      
+      start_period: 10s 
+
+  app:
+    build: . 
+    container_name: sftp_reporter_flask_app 
+    depends_on:
+      db: # The application depends on the database service (will start after it)
+          condition: service_healthy
+    ports:
+      - "5001:5001" 
+    volumes:
+      - ../collected_sftp_files:/collected_sftp_files 
+      - .:/app 
+    environment:
+      FLASK_APP: app.py
+      FLASK_ENV: development 
+      PYTHONUNBUFFERED: 1   
+      
+      DB_HOST: db                     
+      DB_PORT: 5432                  
+      DB_NAME: sftp_activity_db       
+      DB_USER: sftp_reporter_user    
+      DB_PASS: Password_123 
+    restart: unless-stopped
+
+volumes:
+  postgres_db_data: 

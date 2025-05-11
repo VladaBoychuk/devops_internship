@@ -1,125 +1,148 @@
-#!/usr/bin/env python3
-"""
-Parser and DB update module with fixed schema and recursive scanning.
-"""
-import sqlite3
 import os
 import re
-from datetime import datetime
+import psycopg2
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo 
 
-# Paths
-BASE_DIR = os.path.dirname(__file__)
-DATABASE_FILE = os.path.join(BASE_DIR, 'instance', 'reporting.db')
-COLLECTED_FILES_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'collected_sftp_files'))
+DB_HOST = os.getenv('DB_HOST', 'db')
+DB_NAME = os.getenv('DB_NAME', 'sftp_activity_db')
+DB_USER = os.getenv('DB_USER', 'sftp_reporter_user')
+DB_PASS = os.getenv('DB_PASS', 'Password_123') 
+DB_PORT = os.getenv('DB_PORT', '5432')
+
+UTC_TZ = ZoneInfo("UTC") 
 
 HOST_IPS = {
-    "sftp1": "192.168.56.101",
-    "sftp2": "192.168.56.102",
-    "sftp3": "192.168.56.103",
+    'sftp1': '192.168.56.101',
+    'sftp2': '192.168.56.102',
+    'sftp3': '192.168.56.103'
 }
 
-def get_db_connection():
-    """Ensure DB directory exists and return a SQLite connection."""
-    os.makedirs(os.path.dirname(DATABASE_FILE), exist_ok=True)
-    conn = sqlite3.connect(DATABASE_FILE, detect_types=sqlite3.PARSE_DECLTYPES)
-    conn.row_factory = sqlite3.Row
+SFTP_LOG_ROOT_DIR = '/collected_sftp_files'
+
+FILENAME_REGEX = re.compile(r'^(sftp[1-3])_(\d{8})_(\d{6})\.txt$')
+
+def get_postgresql_connection():
+    conn = psycopg2.connect(
+        host=DB_HOST,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS,
+        port=DB_PORT
+    )
     return conn
 
-def init_db():
-    """Create the sftp_log_entries table with composite unique key."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
+def init_db_schema():
+    conn = None
+    try:
+        conn = get_postgresql_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
         CREATE TABLE IF NOT EXISTS sftp_log_entries (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename       TEXT    NOT NULL,
-            source_host    TEXT    NOT NULL,
-            source_ip      TEXT    NOT NULL,
-            file_timestamp TEXT    NOT NULL,
-            receiving_host TEXT    NOT NULL,
-            processed_at   TEXT    NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW', 'localtime')),
-            UNIQUE(filename, receiving_host)
-        )
-    ''')
-    conn.commit()
-    conn.close()
-    print("Database initialized (table 'sftp_log_entries' checked/created).")
-
+            id SERIAL PRIMARY KEY,
+            filename TEXT UNIQUE NOT NULL,
+            source_host TEXT NOT NULL,
+            receiving_host TEXT NOT NULL,
+            file_timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+            processed_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        conn.commit()
+        print("Database schema initialized (table 'sftp_log_entries' checked/created for PostgreSQL).")
+    except psycopg2.Error as e:
+        print(f"Error initializing PostgreSQL database schema: {e}")
+    finally:
+        if conn:
+            cursor.close()
+            conn.close()
 
 def parse_filename(filename):
-    """Extract source_host and timestamp from filename pattern."""
-    match = re.match(r'(sftp[1-3])_(\d{8})_(\d{6})\.txt', filename)
-    if not match:
-        return None, None
-    source_host, date_str, time_str = match.groups()
-    try:
-        dt = datetime.strptime(f"{date_str}{time_str}", "%Y%m%d%H%M%S")
-        timestamp_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-        return source_host, timestamp_str
-    except ValueError:
-        print(f"Error: could not parse datetime from filename '{filename}'")
-        return None, None
-
+    match = FILENAME_REGEX.match(filename)
+    if match:
+        source_host = match.group(1)
+        date_str = match.group(2)
+        time_str = match.group(3)
+        
+        try:
+            year = int(date_str[0:4])
+            month = int(date_str[4:6])
+            day = int(date_str[6:8])
+            hour = int(time_str[0:2])
+            minute = int(time_str[2:4])
+            second = int(time_str[4:6])
+            
+            file_datetime_utc = datetime(year, month, day, hour, minute, second)
+            return source_host, file_datetime_utc
+        except ValueError:
+            return None, None
+    return None, None
 
 def scan_and_update_db():
-    """
-    Walk through collected_sftp_files/*_uploads recursively,
-    parse each file, and insert new entries into the DB.
-    """
-    print(f"Starting scan of directory: {COLLECTED_FILES_DIR}")
-    if not os.path.exists(COLLECTED_FILES_DIR):
-        print(f"Error: Directory {COLLECTED_FILES_DIR} not found.")
-        return
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting scan of {SFTP_LOG_ROOT_DIR} for PostgreSQL update...")
+    conn = None
+    try:
+        conn = get_postgresql_connection()
+        cursor = conn.cursor()
+        files_processed_in_this_run = 0
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    new_count = 0
-
-    for folder_name in os.listdir(COLLECTED_FILES_DIR):
-        m = re.match(r'(sftp[1-3])_uploads', folder_name)
-        if not m:
-            continue
-        receiving_host = m.group(1)
-        root_dir = os.path.join(COLLECTED_FILES_DIR, folder_name)
-        if not os.path.isdir(root_dir):
-            continue
-        print(f"  Scanning sub-directory: {root_dir} (receiving_host={receiving_host})")
-
-        # recursive walk
-        for dirpath, dirnames, filenames in os.walk(root_dir):
-            for fname in filenames:
-                src_host, ts = parse_filename(fname)
-                if not src_host:
-                    print(f"    Skipping non-matching file: {fname}")
+        for receiving_host_dir in os.listdir(SFTP_LOG_ROOT_DIR):
+            receiving_host_path = os.path.join(SFTP_LOG_ROOT_DIR, receiving_host_dir)
+            if os.path.isdir(receiving_host_path):
+                # We expect the folder name to be the name of the receiving host + "_uploads"
+                # For example, "sftp1_uploads" -> "sftp1"
+                receiving_host_match = re.match(r'^(sftp[1-3])(?:_uploads)?$', receiving_host_dir)
+                if not receiving_host_match:
+                    print(f"Skipping directory with unexpected name: {receiving_host_dir}")
                     continue
-                src_ip = HOST_IPS.get(src_host, "Unknown")
-                try:
-                    cursor.execute(
-                        '''INSERT INTO sftp_log_entries
-                           (filename, source_host, source_ip, file_timestamp, receiving_host)
-                           VALUES (?, ?, ?, ?, ?)''',
-                        (fname, src_host, src_ip, ts, receiving_host)
-                    )
-                    conn.commit()
-                    new_count += 1
-                    print(f"    Added: {fname} from {src_host} to {receiving_host}")
-                except sqlite3.IntegrityError:
-                    # already seen this (filename, receiving_host)
-                    pass
-                except Exception as e:
-                    print(f"    Error inserting {fname}: {e}")
+                
+                receiving_host = receiving_host_match.group(1)
+                
+                print(f"Scanning sub-directory for {receiving_host}: {receiving_host_path}")
+                for filename in os.listdir(receiving_host_path):
+                    if filename.endswith('.txt'):
+                        source_host, file_datetime_utc = parse_filename(filename)
+                        if source_host and file_datetime_utc:
+                            if source_host == receiving_host:
+                                continue
 
-    conn.close()
-    if new_count:
-        print(f"Finished scanning. {new_count} new entries added.")
-    else:
-        print("Finished scanning. No new files added.")
+                            processed_at_datetime_utc = datetime.now(UTC_TZ).replace(tzinfo=None)
 
+
+                            try:
+                                cursor.execute(
+                                    """
+                                    INSERT INTO sftp_log_entries 
+                                        (filename, source_host, receiving_host, file_timestamp, processed_at) 
+                                    VALUES (%s, %s, %s, %s, %s)
+                                    ON CONFLICT (filename) DO NOTHING
+                                    """,
+                                    (filename, source_host, receiving_host, file_datetime_utc, processed_at_datetime_utc)
+                                )
+                                if cursor.rowcount > 0:
+                                    files_processed_in_this_run += 1
+                                    print(f"Added to DB (PG): {filename} (Source: {source_host}, Receiver: {receiving_host})")
+                            except psycopg2.Error as e:
+                                print(f"Error inserting {filename} into PostgreSQL: {e}")
+                                conn.rollback() 
+                            else:
+                                conn.commit() 
+                        else:
+                            print(f"Could not parse filename: {filename} in {receiving_host_dir}")
+            
+        print(f"Scan finished. {files_processed_in_this_run} new files added to PostgreSQL DB in this run.")
+
+    except psycopg2.Error as e:
+        print(f"Database connection or operation error in scan_and_update_db (PG): {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred in scan_and_update_db (PG): {e}")
+    finally:
+        if conn:
+            cursor.close()
+            conn.close()
 
 if __name__ == '__main__':
-    print("--- Manual Script Execution Start ---")
-    init_db()
-    print("\nScanning and updating database...\n")
+    print("Running parser_and_db.py directly (for PostgreSQL). Initializing schema...")
+    init_db_schema()
+    print("\nScanning for initial data...")
     scan_and_update_db()
-    print("\n--- Manual Script Execution End ---")
-    print(f"DB location: {DATABASE_FILE}")
+    print("\nManual run finished.")

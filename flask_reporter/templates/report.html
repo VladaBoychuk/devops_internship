@@ -25,7 +25,7 @@
         header h1 { margin: 0; font-weight: 700; font-size: 1.8rem; letter-spacing: 0.5px;}
         main { max-width:1200px; margin:0 auto; padding:0 1rem; }
         .card { background:var(--card-bg); border-radius:var(--border-radius); box-shadow:var(--shadow); padding:1.5rem; margin-bottom:2rem; }
-        .card h2 { margin-top:0; color: var(--primary-color); font-size: 1.4rem; border-bottom: 2px solid var(--bg-color); padding-bottom: 0.5rem; margin-bottom: 1rem;}
+        .card h2, .card h3 { margin-top:0; color: var(--primary-color); font-size: 1.4rem; border-bottom: 2px solid var(--bg-color); padding-bottom: 0.5rem; margin-bottom: 1rem;}
         table { width:100%; border-collapse:collapse; margin-top:1rem; }
         th, td { padding:0.8rem 1rem; text-align:left; border-bottom: 1px solid #e5e7eb; }
         thead { background:var(--primary-color); color:#fff; }
@@ -36,12 +36,62 @@
             background-color: #e0f2fe;
             border-left: 4px solid var(--primary-color);
             padding: 1rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
             border-radius: var(--border-radius);
             font-size: 0.9rem;
         }
         .info-box p { margin: 0.3rem 0; }
 
+        .date-selector-box {
+            background-color: var(--card-bg);
+            border: 1px solid #e0e0e0;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+        }
+        .date-selector-box form {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .date-selector-box label {
+            font-weight: 500;
+            color: var(--primary-color);
+            margin-right: 5px;
+        }
+        .date-selector-box input[type="date"], .date-selector-box select {
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: 'Roboto', sans-serif;
+        }
+        .date-selector-box button {
+            padding: 0.6rem 1rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        .date-selector-box button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        @media (max-width:992px) {
+            .date-selector-box form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+             .date-selector-box label { margin-bottom: 3px; }
+            .date-selector-box input[type="date"], .date-selector-box select, .date-selector-box button {
+                width: 100%;
+                margin-top: 5px;
+            }
+        }
         @media (max-width:768px) {
             table thead { display:none; }
             table tbody, table tr, table td { display:block; width:100%; }
@@ -60,7 +110,7 @@
                 color: var(--primary-color);
             }
         }
-        .chart-container { position:relative; width:100%; min-height: 350px; padding-top:0; }
+        .chart-container { position:relative; width:100%; min-height: 350px; padding-top:0; margin-bottom: 2rem;}
         .chart-container canvas { position:absolute; top:0; left:0; width:100%!important; height:100%!important; border-radius:var(--border-radius); }
         footer { text-align:center; font-size:.875rem; color:var(--neutral-color); margin:2rem 0; padding-top: 1rem; border-top: 1px solid #e5e7eb;}
 
@@ -78,18 +128,37 @@
              <p>Database last updated by scheduler: <strong>{{ last_db_update if last_db_update != "N/A" else "Scheduler not run yet or first update pending" }}</strong></p>
         </section>
 
+        <section class="date-selector-box">
+            <form method="GET" action="{{ url_for('report') }}">
+                <label for="selected_date">Date (UTC):</label>
+                <input type="date" id="selected_date" name="selected_date" value="{{ selected_date_for_display }}">
+                
+                <label for="start_hour">From Hour (UTC):</label>
+                <select id="start_hour" name="start_hour">
+                    {% for h in range(24) %}
+                    <option value="{{ '%02d' % h }}" {% if h == selected_start_hour_for_display %}selected{% endif %}>{{ '%02d:00' % h }}</option>
+                    {% endfor %}
+                </select>
+                
+                <label for="end_hour">To Hour (UTC):</label>
+                <select id="end_hour" name="end_hour">
+                    {% for h in range(24) %}
+                    <option value="{{ '%02d' % h }}" {% if h == selected_end_hour_for_display %}selected{% endif %}>{{ '%02d:00' % h }}</option>
+                    {% endfor %}
+                </select>
+                
+                <button type="submit">Show Activity</button>
+            </form>
+        </section>
+
         <section class="card">
             <h2>SFTP Host Sending Activity & Status</h2>
             {% if host_sending_activity %}
             <table>
                 <thead>
                     <tr>
-                        <th>Source Host</th>
-                        <th>IP Address</th>
-                        <th>Total Files Sent</th>
-                        <th>First File Sent</th>
-                        <th>Last File Sent</th>
-                        <th>Status</th>
+                        <th>Source Host</th><th>IP Address</th><th>Total Files Sent</th>
+                        <th>First File Sent</th><th>Last File Sent</th><th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -105,22 +174,14 @@
                     {% endfor %}
                 </tbody>
             </table>
-            {% else %}
-            <p>No host sending activity data to display.</p>
-            {% endif %}
+            {% else %} <p>No host sending activity data to display.</p> {% endif %}
         </section>
 
         <section class="card">
             <h2>Transfers Between Hosts (Receiver &lt;- Source)</h2>
             {% if stats_detailed_table %}
             <table>
-                <thead>
-                    <tr>
-                        <th>Receiving Host</th>
-                        <th>Source Host</th>
-                        <th>Files Count</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Receiving Host</th><th>Source Host</th><th>Files Count</th></tr></thead>
                 <tbody>
                     {% for row in stats_detailed_table %}
                     <tr>
@@ -131,37 +192,38 @@
                     {% endfor %}
                 </tbody>
             </table>
-            {% else %}
-            <p>No detailed transfer data to display.</p>
-            {% endif %}
+            {% else %} <p>No detailed transfer data to display.</p> {% endif %}
         </section>
         
         <section class="card">
             <h2>Activity Chart (Files Received by Host, Stacked by Source)</h2>
-            <div class="chart-container">
-                <canvas id="sftpActivityChart"></canvas>
-            </div>
+            <div class="chart-container"> <canvas id="sftpActivityChart"></canvas> </div>
         </section>
+
+        <section class="card">
+            <h3>Hourly File Transfers from Each Source on {{ selected_date_for_display }} (UTC)</h3>
+            <div class="chart-container"> <canvas id="hourlyActivityChart"></canvas> </div>
+        </section>
+
     </main>
     <footer><small>Data on this page is automatically updated. Staleness threshold: {{ staleness_threshold_minutes }} minutes.</small></footer>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const labels   = {{ chart_labels   | tojson | safe }};
-        const datasets = {{ chart_datasets | tojson | safe }};
+        const sftpActivityChartCanvas = document.getElementById('sftpActivityChart');
+        const sftpChartLabels   = {{ chart_labels_overall | tojson | safe }};
+        const sftpChartDatasets = {{ chart_datasets_overall | tojson | safe }};
         
-        if (labels && labels.length && datasets && datasets.length) {
-            const ctx = document.getElementById('sftpActivityChart').getContext('2d');
-            new Chart(ctx, {
+        if (sftpActivityChartCanvas && sftpChartLabels && sftpChartLabels.length && sftpChartDatasets && sftpChartDatasets.length) {
+            const sftpCtx = sftpActivityChartCanvas.getContext('2d');
+            new Chart(sftpCtx, {
                 type: 'bar',
-                data: { labels, datasets },
+                data: { labels: sftpChartLabels, datasets: sftpChartDatasets },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
+                    responsive: true, maintainAspectRatio: false,
                     plugins: {
-                        title:  { display: true, text: 'Files Received per Host (Stacked by Source)' },
-                        legend: { position: 'top' },
+                        title: { display: false }, legend: { position: 'top' },
                         tooltip:{ mode: 'index', intersect: false }
                     },
                     scales: {
@@ -170,11 +232,47 @@
                     }
                 }
             });
-        } else {
-            const chartDiv = document.getElementById('sftpActivityChart').parentNode;
-            if (chartDiv) {
-                chartDiv.innerHTML = '<p style="text-align:center; padding: 20px;">Not enough data for activity chart.</p>';
+        } else if (sftpActivityChartCanvas) {
+            const sftpChartParentDiv = sftpActivityChartCanvas.parentNode;
+            if (sftpChartParentDiv) {
+                sftpChartParentDiv.innerHTML = '<p style="text-align:center; padding: 20px;">Not enough data for activity chart.</p>';
             }
+        }
+
+        const hourlyChartCanvas = document.getElementById('hourlyActivityChart');
+        const hourlyChartLabels = {{ hourly_chart_labels | tojson | safe }};
+        const hourlyChartDatasets = {{ hourly_chart_datasets | tojson | safe }};
+
+        if (hourlyChartCanvas && hourlyChartLabels && hourlyChartLabels.length && hourlyChartDatasets && hourlyChartDatasets.length > 0) {
+            const hourlyCtx = hourlyChartCanvas.getContext('2d');
+            new Chart(hourlyCtx, {
+                type: 'bar',
+                data: {
+                    labels: hourlyChartLabels,
+                    datasets: hourlyChartDatasets
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, position: 'top' },
+                        title: { display: false },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Number of Files Transferred' },
+                            ticks: { stepSize: 1, callback: function(value) { if (Number.isInteger(value)) { return value; } } }
+                        },
+                        x: { title: { display: true, text: 'Hour of Day (UTC)' } }
+                    }
+                }
+            });
+        } else if (hourlyChartCanvas) {
+             const hourlyChartParentDiv = hourlyChartCanvas.parentNode;
+             if (hourlyChartParentDiv) {
+                hourlyChartParentDiv.innerHTML = '<p style="text-align:center; padding: 20px;">No hourly activity data for the selected date/time range or chart data missing.</p>';
+             }
         }
     });
     </script>
