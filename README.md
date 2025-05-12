@@ -63,3 +63,39 @@ Performs final setup tasks such as restarting services and cleaning up.
 ```bash
 vagrant provision --provision-with final_setup
 ```
+## Running Application with PostgreSQl using Docker-Compose 
+After all virtual machines are provisioned and SFTP exchange is running, you can launch the log analysis web application using Docker Compose.
+### 1. Navigate to the application directory
+```bash
+cd flask_reporter
+```
+### 2. Build and run the containers
+This command will build the Flask application and start both the app and PostgreSQL services.
+```bash
+docker compose up --build
+```
+### 3. Access the web interface
+You will see a web dashboard with statistics on file exchanges between SFTP servers.
+```bash
+http://127.0.0.1:5001/
+```
+## Alternative: Use Pre-Built Docker Image from Docker Hub
+The application image is also available on Docker Hub and can be pulled directly
+```bash
+docker pull vladushaaaa/flask_reporter-app
+```
+## To Stop the Application
+```bash
+docker compose down
+```
+## Additional notes
+- All provisioning scripts are designed to be idempotent — you can re-run them safely if needed.
+- You can verify that the file exchange and reporting processes are working correctly by checking the synchronized folder `../collected_sftp_files` on the host machine. It reflects the contents of the `/collected_sftp_files` directory from inside the container.
+- PostgreSQL data is stored in a Docker volume by default; removing the volume will reset the database state.
+## Troubleshooting
+- If a `Timed out` error occurs during `vagrant up` or `vagrant provision`, re-run the command specifically for the affected VM (e.g., `vagrant up sftp2`).
+- In case of SSH connection problems, verify that:
+  - The sftpuser account was created successfully on all VMs.
+  - SSH keys were generated and exchanged properly.
+  - Permissions for `.ssh` folders and `authorized_keys` are correct.
+- If Docker Compose services fail, check for port conflicts (e.g., `ports 5001`, `5433`) or stale volumes.
