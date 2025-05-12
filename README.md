@@ -88,6 +88,15 @@ docker pull vladushaaaa/flask_reporter-app
 ```bash
 docker compose down
 ```
+## To Stop ALL
+To safely stop or remove VMs when needed
+```bash
+vagrant suspend
+```
+or
+```bash
+vagrant destroy
+```
 ## Additional notes
 - All provisioning scripts are designed to be idempotent — you can re-run them safely if needed.
 - You can verify that the file exchange and reporting processes are working correctly by checking the synchronized folder `../collected_sftp_files` on the host machine. It reflects the contents of the `/collected_sftp_files` directory from inside the container.
