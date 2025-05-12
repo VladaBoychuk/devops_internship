@@ -1,7 +1,6 @@
 FROM python:3.9-alpine AS builder
 
-RUN apk add --no-cache --virtual .build-deps gcc musl-dev libffi-dev openssl-dev cargo postgresql-dev && \
-    apk add --no-cache tzdata
+RUN apk add --no-cache --virtual .build-deps gcc musl-dev libffi-dev openssl-dev cargo postgresql-dev
 
 WORKDIR /app_build
 COPY requirements.txt .

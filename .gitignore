@@ -1,12 +1,59 @@
-.vagrant/*
-.vagrant
-keys/*
-keys
+# Git
+.git
+.gitignore
+
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+local_settings.py 
+
+# Data bases
+*.sqlite3
+*.db
+
+# logs
 *.log
-*.pub
-collected_sftp_files/*
+logs/
+
+# Files IDE та ОS
+.vscode/
+.idea/
+.project
+.pydevproject
+.DS_Store
+Thumbs.db
 collected_sftp_files
-instance
-instance/*
-__pycache__/*
-__pycache__
+
+# Docker files
+Dockerfile
+docker-compose.yml 
+docker-compose.*.yml
+
+# Tests
+tests/
+*.test
+*.py.test
+.pytest_cache/
+coverage.*
+htmlcov/
+.tox/
+
+# Documentation
+docs/
+README.md
+CONTRIBUTING.md
+
+# Another files
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+.vagrant
