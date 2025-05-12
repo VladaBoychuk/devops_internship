@@ -17,7 +17,7 @@ services:
       start_period: 10s 
 
   app:
-    build: . 
+    image: vladushaaaa/flask_reporter-app:latest
     container_name: sftp_reporter_flask_app 
     depends_on:
       db: # The application depends on the database service (will start after it)
