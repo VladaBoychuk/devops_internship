@@ -18,6 +18,8 @@ passwords=$(grep -E "admin_pass|softdbpass" "$FILE" |
     cut -d"'" -f4 |
     sort -u)
 
+readarray -t common_passwords_array < "$DICT"
+
 echo "$passwords" | while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   if [[ "$line" =~ value=\"([^\"]+)\" ]]; then
@@ -33,10 +35,20 @@ echo "$passwords" | while IFS= read -r line; do
   [[ "$pw" =~ [a-z] ]]  || { echo "FAIL (no lowercase)"; continue; }
   [[ "$pw" =~ [0-9] ]]  || { echo "FAIL (no digit)"; continue; }
   [[ "$pw" =~ [^a-zA-Z0-9] ]] || { echo "FAIL (no special char)"; continue; }
-  if ! grep -Fq "$pw" "$DICT"; then
-    echo "FAIL (common password)"
+
+  found_common=false
+  for common_pw in "${common_passwords_array[@]}"; do
+    if [[ "$pw" == *"$common_pw"* ]]; then
+      echo "FAIL (contains common substring)"
+      found_common=true
+      break
+    fi
+  done
+
+  if "$found_common"; then
     continue
   fi
+
   echo "OK"
 done
 
